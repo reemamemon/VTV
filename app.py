@@ -1,9 +1,9 @@
 import streamlit as st
-import sounddevice as sd
 import numpy as np
-import torch
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import pyttsx3
+import pyaudio
+import wave
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import io
 
 # Load GPT-2 model and tokenizer
@@ -17,18 +17,45 @@ engine = pyttsx3.init()
 st.title("Real-Time Voice-to-Voice Processing")
 st.write("Click the record button and speak. The system will transcribe your speech, generate a response, and play it back.")
 
-# Record audio function
+# Record audio function using PyAudio
 def record_audio():
     st.write("Recording...")
     samplerate = 16000  # Sample rate for audio recording
     duration = 5  # seconds to record
-    audio_data = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=1, dtype='float32')
-    sd.wait()
+    
+    # Set up PyAudio
+    p = pyaudio.PyAudio()
+    
+    # Open stream for recording
+    stream = p.open(format=pyaudio.paInt16,
+                    channels=1,
+                    rate=samplerate,
+                    input=True,
+                    frames_per_buffer=1024)
+    
+    frames = []
+    
+    # Record for 'duration' seconds
+    for _ in range(0, int(samplerate / 1024 * duration)):
+        data = stream.read(1024)
+        frames.append(data)
+    
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+    
+    # Save the recorded audio to a wave file
+    with wave.open('recorded_audio.wav', 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+        wf.setframerate(samplerate)
+        wf.writeframes(b''.join(frames))
+
     st.write("Recording finished.")
-    return audio_data
+    return 'recorded_audio.wav'
 
 # Process the recorded audio and generate a response using GPT-2
-def generate_response(audio_data):
+def generate_response(audio_file):
     # Convert audio to text (you can integrate a speech-to-text model here, e.g., Whisper or other models)
     # For simplicity, using a placeholder text since no STT is implemented
     transcribed_text = "Hello, how are you?"
@@ -46,8 +73,8 @@ def generate_response(audio_data):
 
 # Main logic for Streamlit app
 if st.button("Record"):
-    audio_data = record_audio()
-    response_text = generate_response(audio_data)
+    audio_file = record_audio()
+    response_text = generate_response(audio_file)
     
     st.write(f"Response: {response_text}")
     st.audio('response.mp3', format='audio/mp3')
